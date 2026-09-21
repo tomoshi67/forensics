@@ -1,0 +1,6 @@
+case file: ARC-2026-07
+handler: unknown
+
+the scanner crashed mid-write. scan.dat is the only thing we got out.
+flag (from the ticket system): foobarnitd{n0t_th3_r34l_0n3}
+^ pretty sure that one is a placeholder. check the scan itself.

@@ -1,0 +1,160 @@
+# 2. 🔍 Forensics Challenge — Two Locks, One Hex Editor
+
+## Problem Statement
+
+**Category:** Forensics
+**Difficulty:** Easy–Medium
+**Flag:** `foobarnitd{...}`
+**Attachment:** `chall.zip`
+
+Our club's document scanner crashed halfway through writing a case file.
+IT managed to pull one archive off the disk, but nothing will open it.
+`unzip` refuses, and the one useful-looking file inside has no idea what it is.
+
+Recover whatever the scanner was trying to save.
+
+> "the file isn't broken, it just forgot who it is." - GLUG sysadmin
+
+### 🚩 Flag Format
+
+foobarnitd{...}
+
+---
+
+# 🕵️ Solution Approach
+
+### 1. Look at the file, not the extension
+
+$ file chall.zip
+chall.zip: Zip archive data, at least v2.0 to extract, compression method=store
+
+$ unzip -l chall.zip
+End-of-central-directory signature not found.
+
+So the start of the file is fine (`50 4B 03 04` = local file header) but the
+END of the archive is broken. A ZIP is read from the back: tools look for the
+End Of Central Directory (EOCD) record first.
+
+---
+
+### 2. Find what is missing
+
+Open chall.zip in a hex editor (HxD, ImHex, 010 Editor, or `xxd`).
+
+The last 18 bytes of the file are:
+
+00 00 00 00 02 00 02 00 77 00 00 00 85 44 00 00 00 00
+
+A proper EOCD record is 22 bytes:
+
+50 4B 05 06 | disk# | cdisk# | entries | entries | cd size | cd offset | comment len
+sig (4)     |  2    |   2    |   2     |   2     |   4     |    4      |     2
+
+The 4-byte signature `50 4B 05 06` has been cut out, only the remaining
+18 bytes are left. Two entries (02 00 02 00) match the two files in the archive.
+
+Tip: create your own small zip and compare it with the broken one.
+
+---
+
+### 3. Repair the zip
+
+Insert (do NOT overwrite) the 4 bytes:
+
+50 4B 05 06
+
+at offset 0x44FC (that is 18 bytes before the end of the file).
+Save, then extract.
+
+Inside `case/`:
+  notes.txt   -> contains a DECOY flag: foobarnitd{n0t_th3_r34l_0n3}
+  scan.dat    -> the real evidence
+
+(Submitting the decoy is wrong. The note itself says it is a placeholder.)
+
+---
+
+### 4. Identify scan.dat
+
+$ file scan.dat
+scan.dat: data
+
+Open it in a hex editor:
+
+00 00 00 00 00 00 00 00 00 00 00 0D 49 48 44 52 ...
+                              I  H  D  R
+
+`IHDR` is a very recognisable string. It is the first chunk of a PNG image.
+Every PNG starts with an 8-byte signature followed by a chunk whose length is
+00 00 00 0D and whose type is IHDR. Here those 8 signature bytes are all zeros.
+
+The PNG signature is:
+
+89 50 4E 47 0D 0A 1A 0A   (  .PNG....  )
+
+---
+
+### 5. Repair the image
+
+Overwrite (this time REPLACE, don't insert) the first 8 bytes of scan.dat with:
+
+89 50 4E 47 0D 0A 1A 0A
+
+Save as scan.png and open it. The flag is rendered on the image.
+
+---
+
+### 6. Alternative approaches (all valid)
+
+- Python: read the file, append/insert `b"PK\x05\x06"` at len-18, then open with
+  `zipfile`; then overwrite the first 8 bytes of scan.dat with the PNG magic.
+- Automated zip repair tools (e.g. `zip -FF`) may also rebuild the archive
+  (not tested by the author). The PNG header still has to be fixed manually.
+- `binwalk` / `foremost` can carve the PNG out because they scan for IHDR/IEND.
+
+---
+
+# 🔗 Complete Solve Chain
+
+chall.zip
+  │
+  ├── file / unzip -l says: no EOCD found
+  ▼
+Hex editor: last 18 bytes look like an EOCD without its signature
+  │
+  ▼
+Insert 50 4B 05 06 at 0x44FC
+  │
+  ▼
+Extract -> notes.txt (decoy flag) + scan.dat (file type: "data")
+  │
+  ▼
+scan.dat starts with 8 zero bytes, then 00 00 00 0D "IHDR"
+  │
+  ▼
+Replace first 8 bytes with 89 50 4E 47 0D 0A 1A 0A
+  │
+  ▼
+scan.png opens, flag written on the image
+  │
+  ▼
+foobarnitd{m4g1c_byt3s_n3v3r_l13_glug}
+
+## 🏁 Final Answer
+
+foobarnitd{m4g1c_byt3s_n3v3r_l13_glug}
+
+---
+
+# 📝 Organiser Notes
+
+- Decoy flag (do NOT accept): foobarnitd{n0t_th3_r34l_0n3}
+- Why this can't be Googled: the original "A Hexcellent Question" challenge only
+  needed the zip footer restored and had the flag in a text file. This version
+  has a different file structure, a second corruption layer (PNG magic), a decoy,
+  and the flag exists only as pixels in a custom-rendered image, so searching
+  the old writeup does not give the answer.
+- Offsets in this text are for the provided chall.zip. If you regenerate the
+  file, re-check them.
+- Optional hint to release later: "Zip files are read from the back. PNGs are
+  recognised from the front."

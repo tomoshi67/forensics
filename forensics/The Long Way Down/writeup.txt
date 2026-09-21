@@ -1,0 +1,145 @@
+# 3. 🗂️ Forensics Challenge — The Long Way Down
+
+## Problem Statement
+
+**Category:** Forensics
+**Difficulty:** Easy–Medium
+**Flag:** `foobarnitd{...}`
+**Attachment:** `trailhead.zip`
+
+I left it somewhere in this maze of folders.
+I don't remember which room I put it in,
+only that I walked a long, long way to get there.
+
+### 🚩 Flag Format
+
+foobarnitd{...}
+
+---
+
+# 🕵️ Solution Approach
+
+### 1. Look at what you got
+
+trailhead.zip extracts into a huge tree: 1607 folders, all named with two
+hex characters (00-ff), and only 19 files.
+
+There are only a few files, so it is tempting to read all of them. They are
+mostly junk ("nothing here", "wrong way", ...). One file is much bigger than
+the rest (10 KB), and it hides a backwards string. Reversing it gives:
+
+foobarnitd{th4ts_th3_0ld_tr1ck}
+
+This is a DECOY. It is in the right format on purpose, but it is not the flag.
+
+---
+
+### 2. Notice the shape of the tree
+
+Almost the whole tree is shallow: it stops at depth 4. But a few branches keep
+going for 20, 25, 28 and 36 levels. Those long branches are the real clue.
+
+Windows:
+    tree /F > tree.txt      (open tree.txt and scroll for the very long branches)
+
+Linux / macOS:
+    find . -type d | awk '{print gsub("/","/"), $0}' | sort -rn | head
+
+This prints every folder with its depth first, deepest on top.
+(Note: every folder on a long branch appears, so the top rows are all the same
+branch at depth 36, 35, 34, ... The deepest row is the full path.)
+
+Python:
+    import os
+    leaves = [r for r, d, f in os.walk(".") if not d]
+    leaves.sort(key=lambda p: -p.count("/"))
+    print(leaves[:4])
+
+---
+
+### 3. Read the path
+
+The deepest path starts like this:
+
+./66/6f/6f/62/61/72/6e/69/74/64/7b/62/72/33/34/...
+
+Every folder name is one byte in hex. Put them together and convert to ASCII:
+
+66 6f 6f 62 61 72 6e 69 74 64 7b ...
+ f  o  o  b  a  r  n  i  t  d  {  ...
+
+66 = f, 6f = o, 62 = b, 61 = a, 72 = r, 6e = n, 69 = i, 74 = t, 64 = d, 7b = {
+
+---
+
+### 4. Decode the whole thing
+
+Linux one-liner:
+    deep=$(find . -type d | awk '{print gsub("/","/"), $0}' | sort -rn | head -1 | cut -d' ' -f2-)
+    echo "$deep" | sed 's#^\./##; s#/##g' | python3 -c "import sys,binascii; print(binascii.unhexlify(sys.stdin.read().strip()).decode())"
+
+Or paste the joined hex into CyberChef ("From Hex").
+
+Result:
+    foobarnitd{br34dcrumbs_l34d_th3_w4y}
+
+---
+
+### 5. The other long branches
+
+Three shorter branches also decode to plain text, but none are in flag format:
+
+    not_the_flag_keep_walking        (25 levels)
+    wrong_turn_go_deeper             (20 levels)
+    you_are_getting_warmer_maybe     (28 levels)
+
+The real one is the deepest branch (36 levels), and it is the only one that
+starts with the flag format.
+
+---
+
+# 🔗 Complete Solve Chain
+
+trailhead.zip
+  │
+  ▼
+1607 folders, 19 files
+  │
+  ├── biggest file -> reversed -> foobarnitd{th4ts_th3_0ld_tr1ck}   ❌ decoy
+  │
+  ▼
+Tree is shallow (depth 4) except for a few very long branches
+  │
+  ▼
+Find the deepest path (36 levels)
+  │
+  ▼
+./66/6f/6f/62/61/72/6e/69/74/64/7b/...
+  │
+  ▼
+Join folder names -> hex string
+  │
+  ▼
+Hex to ASCII
+  │
+  ▼
+foobarnitd{br34dcrumbs_l34d_th3_w4y}
+
+## 🏁 Final Answer
+
+foobarnitd{br34dcrumbs_l34d_th3_w4y}
+
+---
+
+# 📝 Organiser Notes
+
+- Why this can't be Googled: the original "SubDirectoTree" challenge had the flag
+  inside the biggest file, reversed. Here the flag is not stored in any file at all.
+  It is encoded in the folder NAMES along one path. The old writeup's method leads to
+  a decoy flag instead.
+- Decoy flag foobarnitd{th4ts_th3_0ld_tr1ck} looks like a real flag. Make sure the
+  platform rejects it. If someone submits it, they probably found the old writeup.
+- Folder count: 1607. Files: 19. Deepest path: 36 levels, about 110 characters.
+- Windows has a 260-character path limit. Players should extract close to the drive
+  root (e.g. C:\ctf\), or extraction can fail on the long branch.
+- Verified: the flag is recovered both with a shell pipeline and with a Python script.
